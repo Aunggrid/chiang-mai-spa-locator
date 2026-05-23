@@ -340,7 +340,7 @@
                             </select>
                             <div class="overview-action">
                                 <span>คลิกเพื่อดูแผนที่</span>
-                                <button id="ovGoMap" onclick="goToMapFromOverview()" title="ดูบนแผนที่" disabled>
+                                <button id="ovGoMap" onclick="goToMapFromOverview()" title="ดูบนแผนที่">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
                                     </svg>
@@ -781,7 +781,6 @@
                     const name = p[COL_NAME_TH] || p[COL_NAME_EN] || '(ไม่มีชื่อ)';
                     return `<option value="${idx}">${escapeHtml(name)}</option>`;
                 }).join('');
-            updateOverviewGoButton();
         }
         function populateSearchTambons() {
             const amphoe = document.getElementById('searchAmphoe').value;
@@ -792,18 +791,14 @@
             if(current && [...sel.options].some(o => o.value === current)) sel.value = current;
         }
         function onOverviewAmphoeChange() { populateOverviewPlaces(); }
-        function onOverviewPlaceChange()  { updateOverviewGoButton(); }
+        function onOverviewPlaceChange()  { /* ปุ่มเปิดให้คลิกได้ตลอด — ไม่ต้องคำนวณอะไรเพิ่ม */ }
         function onSearchAmphoeChange()   { populateSearchTambons(); }
-
-        function updateOverviewGoButton() {
-            const placeVal = document.getElementById('ovPlace').value;
-            const amphoeVal = document.getElementById('ovAmphoe').value;
-            document.getElementById('ovGoMap').disabled = !placeVal && !amphoeVal;
-        }
 
         function goToMapFromOverview() {
             const placeVal = document.getElementById('ovPlace').value;
             const amphoeVal = document.getElementById('ovAmphoe').value;
+
+            // 1) เลือกสถานประกอบการเฉพาะร้าน → ซูมไปร้านนั้น
             if(placeVal) {
                 const spa = spaData[parseInt(placeVal, 10)];
                 if(!spa) return;
@@ -818,18 +813,25 @@
                 }
                 return;
             }
-            // เลือกแค่ อำเภอ → ซูมไปยังขอบเขตของหมุดในอำเภอนั้น
+
+            // 2) เลือกแค่อำเภอ หรือไม่ได้เลือกอะไรเลย → ไปหน้าแผนที่แล้ว fit bounds
+            //    (amphoeVal ว่าง = ดูทั้งจังหวัด)
             const list = placesInAmphoe(amphoeVal).filter(p => {
                 const la = parseFloat(p[COL_LAT]), ln = parseFloat(p[COL_LNG]);
                 return !isNaN(la) && !isNaN(ln);
             });
             switchTab('map');
             if(list.length === 0) {
-                alert('ไม่พบพิกัดในอำเภอที่เลือก');
+                alert('ไม่พบพิกัดในขอบเขตที่เลือก');
                 return;
             }
-            const bounds = L.latLngBounds(list.map(p => [parseFloat(p[COL_LAT]), parseFloat(p[COL_LNG])]));
-            setTimeout(() => map.fitBounds(bounds, { padding: [40, 40] }), 200);
+            if(!amphoeVal) {
+                // ทั้งจังหวัด: ใช้ default view ของเชียงใหม่ (สวยกว่า fitBounds ที่ดึงไปไกล)
+                setTimeout(() => map.setView([18.7883, 98.9853], 11), 200);
+            } else {
+                const bounds = L.latLngBounds(list.map(p => [parseFloat(p[COL_LAT]), parseFloat(p[COL_LNG])]));
+                setTimeout(() => map.fitBounds(bounds, { padding: [40, 40] }), 200);
+            }
         }
 
         // 7. ค้นหา — กรอก/เลือก 1+ ช่อง รวมเงื่อนไขแบบ AND
