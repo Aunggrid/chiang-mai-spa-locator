@@ -1,0 +1,18 @@
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Node test helpers (we don't use a build step)
+node_modules/
+package-lock.json
+
+# Local screenshots / scratch
+_*.png
+_*.js
+_test_*

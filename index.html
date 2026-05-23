@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สถานประกอบการนวดสปา จังหวัดเชียงใหม่</title>
+    
+    <!-- ฟอนต์ Prompt -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS สำหรับแผนที่ Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        /* ตั้งค่าสีตาม Color Palette */
+        :root {
+            --bg-color: #efefef;
+            --text-dark: #000000;
+            --color-public: #51dda2;
+            --color-staff: #f08866;
+            --color-warning: #f0aa93;
+            --white: #ffffff;
+            --radius: 20px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Prompt', sans-serif; }
+
+        body { background-color: var(--bg-color); color: var(--text-dark); overflow-x: hidden; }
+
+        /* --- หน้าที่ 1: Landing Page --- */
+        #landing {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            height: 100vh; text-align: center; padding: 20px; position: relative;
+        }
+        #landing h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        #landing p { font-size: 1.2rem; margin-bottom: 40px; color: #555; line-height: 1.6; }
+        .btn-group { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        
+        .btn-public, .btn-staff {
+            padding: 15px 40px; border: none; border-radius: 50px; font-size: 1.2rem;
+            font-weight: 600; cursor: pointer; transition: transform 0.2s; color: #fff;
+        }
+        .btn-public { background-color: var(--color-public); color: var(--text-dark); }
+        .btn-staff { background-color: var(--color-staff); }
+        .btn-public:hover, .btn-staff:hover { transform: scale(1.05); }
+        
+        #landing footer { position: absolute; bottom: 30px; color: #777; font-size: 0.9rem; }
+
+        /* --- หน้าที่ 2: Main App --- */
+        #app {
+            display: none; flex-direction: column; height: 100vh; padding: 20px;
+            max-width: 1400px; margin: 0 auto;
+        }
+        
+        /* Header และเมนู Tabs */
+        .header {
+            background-color: var(--white); padding: 15px 30px; border-radius: 50px;
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px;
+        }
+        .header h2 { font-size: 1.5rem; margin: 0; }
+        
+        .tabs { background: var(--bg-color); padding: 5px; border-radius: 50px; display: flex; gap: 5px; }
+        .tab {
+            padding: 10px 30px; border: none; background: transparent; border-radius: 40px;
+            cursor: pointer; font-size: 1.1rem; font-weight: 500; transition: 0.3s;
+        }
+        .tab.active { background: var(--white); font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        
+        .actions { display: flex; gap: 10px; }
+        .icon-btn {
+            width: 45px; height: 45px; border-radius: 50%; border: 1px solid #ddd;
+            background: var(--white); cursor: pointer; font-size: 1.3rem;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .icon-btn.dark { background: var(--text-dark); color: var(--white); border: none; }
+
+        /* Layout ซ้าย-ขวา */
+        .main-content { display: flex; gap: 20px; flex: 1; overflow: hidden; }
+        @media (max-width: 768px) { .main-content { flex-direction: column; overflow: auto; } }
+        
+        .panel {
+            background: var(--white); border-radius: var(--radius); padding: 25px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); flex: 1; display: flex; flex-direction: column;
+        }
+        .panel-title { font-size: 1.3rem; font-weight: 600; margin-bottom: 15px; }
+        
+        /* การสลับหน้าจอฝั่งซ้าย */
+        .view { display: none; flex: 1; flex-direction: column; }
+        .view.active { display: flex; }
+        
+        #map { flex: 1; border-radius: 12px; z-index: 1; min-height: 400px; }
+
+        /* --- หน้าค้นหา --- */
+        .search-box { display: flex; flex-direction: column; gap: 18px; }
+        .search-field { position: relative; }
+        .search-field label {
+            position: absolute; top: -10px; left: 18px; background: var(--white);
+            padding: 0 8px; font-size: 0.9rem; color: #555;
+        }
+        .search-field input {
+            width: 100%; padding: 18px; border: 1.5px solid #ddd; border-radius: 50px;
+            font-size: 1.05rem; outline: none; background: transparent;
+        }
+        .search-field input:focus { border-color: var(--color-public); }
+        .search-box button {
+            padding: 15px; background: var(--text-dark); color: var(--white); border: none;
+            border-radius: 50px; font-size: 1.1rem; font-weight: 600; cursor: pointer;
+            margin-top: 5px;
+        }
+        .search-hint { font-size: 0.9rem; color: #888; margin-top: 5px; }
+
+        /* แถวฟิลเตอร์ตามดีไซน์ PDF (filter label + อำเภอ + ตำบล) */
+        .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 6px; }
+        .filter-pill {
+            background: var(--text-dark); color: var(--white);
+            padding: 8px 22px; border-radius: 50px; font-style: italic; font-weight: 500;
+        }
+        .pill-select {
+            flex: 1; min-width: 160px;
+            padding: 14px 20px; border: none; border-radius: 50px;
+            background: var(--color-public); color: var(--text-dark);
+            font-size: 1rem; font-weight: 500; font-family: inherit;
+            cursor: pointer; outline: none;
+            appearance: none; -webkit-appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='black'><path d='M7 10l5 5 5-5z'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 44px;
+        }
+        .pill-select.outline {
+            background-color: transparent; color: var(--text-dark);
+            border: 1.5px solid #ddd;
+        }
+
+        /* --- หน้าภาพรวม --- */
+        #overview-view .panel-title { text-align: center; font-size: 1.4rem; margin-bottom: 25px; }
+        .overview-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+            flex: 1; align-items: center;
+        }
+        @media (max-width: 768px) { .overview-grid { grid-template-columns: 1fr; } }
+        .overview-illustration {
+            display: flex; justify-content: center; align-items: center;
+            background: #f6f6f6; border-radius: 16px; padding: 30px;
+            min-height: 280px; max-height: 380px;
+        }
+        .overview-illustration svg { width: 200px; height: 240px; }
+        .overview-controls { display: flex; flex-direction: column; gap: 18px; }
+        .overview-controls label { font-size: 1.05rem; color: #333; }
+        .overview-action {
+            display: flex; justify-content: flex-end; align-items: center; gap: 12px;
+            margin-top: 10px; font-size: 1.05rem; color: #333;
+        }
+        .overview-action button {
+            width: 44px; height: 44px; border-radius: 50%; border: none;
+            background: var(--text-dark); color: var(--white); cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .overview-action button:disabled { opacity: 0.35; cursor: default; }
+
+        /* --- กล่องแสดงข้อมูลด้านขวา --- */
+        #details-content { display: flex; flex-direction: column; flex: 1; }
+        .no-data { margin: auto; font-size: 1.5rem; color: #ccc; font-weight: 500; }
+        
+        .badge-type {
+            background: var(--color-public); color: var(--text-dark); padding: 15px;
+            border-radius: 30px; text-align: center; font-size: 1.3rem; font-weight: 600; margin-bottom: 20px;
+        }
+        .badge-type.massage { background: var(--color-warning); } /* สีส้มอ่อนสำหรับ นวดเพื่อสุขภาพ */
+        
+        .info-row { font-size: 1.1rem; margin-bottom: 12px; line-height: 1.6; }
+        .info-row b { font-weight: 500; }
+        
+        .btn-view-map {
+            margin-top: 20px; padding: 12px 20px; background: var(--text-dark); color: var(--white);
+            border: none; border-radius: 12px; cursor: pointer; font-size: 1rem; align-self: flex-start;
+            display: flex; align-items: center; gap: 8px; font-weight: 500;
+        }
+
+        /* --- ดีไซน์ Pop-up บนแผนที่ (สไตล์สีดำตามที่ออกแบบ) --- */
+        .leaflet-popup-content-wrapper { background: rgba(0,0,0,0.85); color: #fff; border-radius: 16px; padding: 5px; }
+        .leaflet-popup-tip { background: rgba(0,0,0,0.85); }
+        .popup-title { font-size: 1.2rem; font-weight: 600; margin: 0 0 5px 0; }
+        .popup-subtitle { font-size: 0.95rem; margin-bottom: 10px; color: #ddd; }
+        .popup-addr, .popup-tel { font-size: 0.9rem; margin-bottom: 5px; line-height: 1.4; }
+        .popup-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; }
+        .status-open { color: var(--color-public); font-weight: 600; font-size: 0.95rem; }
+        .status-closed { color: var(--color-staff); font-weight: 600; font-size: 0.95rem; }
+        
+        .gmap-link {
+            background: #fff; color: #000; width: 32px; height: 32px; display: flex; justify-content: center;
+            align-items: center; border-radius: 8px; text-decoration: none; transition: 0.2s;
+        }
+        .gmap-link:hover { background: #ddd; }
+
+        /* --- หน้าที่ 3: Staff Dashboard --- */
+        #staff { display: none; flex-direction: column; height: 100vh; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        #staff .header h2 { color: var(--color-staff); }
+
+        .staff-toolbar {
+            background: var(--white); border-radius: var(--radius); padding: 20px 25px;
+            display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 15px;
+        }
+        .staff-toolbar input[type=text] {
+            flex: 1; min-width: 220px; padding: 12px 18px;
+            border: 1.5px solid #ddd; border-radius: 50px; font-size: 1rem; outline: none;
+        }
+        .staff-toolbar input[type=text]:focus { border-color: var(--color-staff); }
+        .btn-pill {
+            padding: 12px 22px; border: none; border-radius: 50px; cursor: pointer;
+            font-size: 1rem; font-weight: 500; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-add    { background: var(--color-public); color: var(--text-dark); font-weight: 600; }
+        .btn-export { background: var(--text-dark);    color: var(--white); }
+        .btn-reset  { background: var(--color-warning); color: var(--text-dark); }
+        .btn-pill:hover { transform: translateY(-1px); }
+
+        .staff-table-wrap {
+            background: var(--white); border-radius: var(--radius); padding: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05); flex: 1; overflow: auto;
+        }
+        .staff-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        .staff-table thead th {
+            position: sticky; top: 0; background: var(--white); text-align: left;
+            padding: 14px 12px; border-bottom: 2px solid #eee; font-weight: 600; font-size: 0.9rem; color: #555;
+        }
+        .staff-table tbody td { padding: 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+        .staff-table tbody tr:hover { background: #fafafa; }
+        .row-actions { display: flex; gap: 6px; }
+        .icon-action {
+            width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.95rem;
+        }
+        .icon-edit   { background: var(--color-public);  color: var(--text-dark); }
+        .icon-delete { background: var(--color-staff);   color: var(--white); }
+
+        .pill-type { display: inline-block; padding: 4px 12px; border-radius: 20px; background: #e8faf2; color: #1a8f5e; font-size: 0.85rem; font-weight: 500; }
+        .pill-status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; }
+        .pill-status.open   { background: #e8faf2; color: #1a8f5e; }
+        .pill-status.closed { background: #fde7df; color: #c54a26; }
+
+        .staff-pager { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px; color: #555; }
+        .staff-pager button {
+            border: 1px solid #ddd; background: var(--white); border-radius: 50px;
+            padding: 6px 14px; cursor: pointer;
+        }
+        .staff-pager button:disabled { opacity: 0.4; cursor: default; }
+
+        /* Modal Form */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+            padding: 20px;
+        }
+        .modal-backdrop.active { display: flex; }
+        .modal {
+            background: var(--white); border-radius: var(--radius); width: 100%; max-width: 760px;
+            max-height: 90vh; overflow-y: auto; padding: 30px;
+        }
+        .modal h2 { margin-bottom: 5px; }
+        .modal .modal-sub { color: #777; margin-bottom: 20px; font-size: 0.95rem; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+        .form-grid .full { grid-column: 1 / -1; }
+        @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+        .form-section-title {
+            grid-column: 1 / -1; font-weight: 600; color: var(--color-staff);
+            margin-top: 8px; padding-bottom: 4px; border-bottom: 1px solid #eee;
+        }
+        .form-field { display: flex; flex-direction: column; gap: 4px; }
+        .form-field label { font-size: 0.85rem; color: #666; }
+        .form-field input, .form-field select {
+            padding: 11px 14px; border: 1.5px solid #ddd; border-radius: 12px;
+            font-size: 0.95rem; outline: none; font-family: inherit;
+        }
+        .form-field input:focus, .form-field select:focus { border-color: var(--color-staff); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+        .btn-cancel { background: #eee; color: var(--text-dark); }
+        .btn-save   { background: var(--text-dark); color: var(--white); }
+
+        .empty-row { text-align: center; padding: 50px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <!-- หน้าแรก (Landing Page) -->
+    <div id="landing">
+        <h1>สถานประกอบการนวดสปา</h1>
+        <p>หากท่านต้องการทราบตำแหน่ง<br>สถานประกอบการสปาที่มีการขึ้นทะเบียน</p>
+        <div class="btn-group">
+            <button class="btn-public" onclick="enterApp()">สำหรับประชาชน</button>
+            <button class="btn-staff" onclick="enterStaff()">สำหรับเจ้าหน้าที่</button>
+        </div>
+        <footer>เว็บไซต์นี้สนับสนุนโดยสาธารณสุขจังหวัดเชียงใหม่</footer>
+    </div>
+
+    <!-- หน้าหลักของแอป -->
+    <div id="app">
+        <!-- แถบด้านบน -->
+        <div class="header">
+            <h2>สถานประกอบการเพื่อสุขภาพ</h2>
+            <div class="tabs">
+                <button id="tab-overview" class="tab active" onclick="switchTab('overview')">ภาพรวม</button>
+                <button id="tab-map" class="tab" onclick="switchTab('map')">แผนที่</button>
+                <button id="tab-search" class="tab" onclick="switchTab('search')">ค้นหา</button>
+            </div>
+            <div class="actions">
+                <button class="icon-btn" onclick="resetApp()" title="รีเซ็ต">↻</button>
+                <button class="icon-btn dark">☰</button>
+            </div>
+        </div>
+        
+        <div class="main-content" id="mainContent">
+            <!-- ฝั่งซ้าย (ภาพรวม / แผนที่ / ค้นหา) -->
+            <div class="panel">
+                <!-- ภาพรวม -->
+                <div id="overview-view" class="view active">
+                    <div class="panel-title">สถานประกอบการเพื่อสุขภาพในจังหวัดเชียงใหม่</div>
+                    <div class="overview-grid">
+                        <div class="overview-illustration" aria-hidden="true">
+                            <svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M100 10 C 60 10, 40 50, 50 110 C 55 145, 80 190, 100 230 C 120 190, 145 145, 150 110 C 160 50, 140 10, 100 10 Z"
+                                      fill="#51dda2" opacity="0.25" stroke="#51dda2" stroke-width="2"/>
+                                <circle cx="100" cy="105" r="32" fill="#f08866"/>
+                                <path d="M100 75 C 90 95, 90 115, 100 135 C 110 115, 110 95, 100 75 Z" fill="#fff"/>
+                                <text x="100" y="200" text-anchor="middle" font-family="Prompt, sans-serif"
+                                      font-size="14" fill="#555" font-weight="600">เชียงใหม่</text>
+                            </svg>
+                        </div>
+                        <div class="overview-controls">
+                            <label for="ovAmphoe">เลือกอำเภอที่ท่านสนใจ</label>
+                            <select id="ovAmphoe" class="pill-select" onchange="onOverviewAmphoeChange()">
+                                <option value="">— ทั้งจังหวัดเชียงใหม่ —</option>
+                            </select>
+                            <label for="ovPlace">สถานที่ประกอบการเพื่อสุขภาพ</label>
+                            <select id="ovPlace" class="pill-select" onchange="onOverviewPlaceChange()">
+                                <option value="">— ทั้งหมด —</option>
+                            </select>
+                            <div class="overview-action">
+                                <span>คลิกเพื่อดูแผนที่</span>
+                                <button id="ovGoMap" onclick="goToMapFromOverview()" title="ดูบนแผนที่" disabled>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- แผนที่ -->
+                <div id="map-view" class="view">
+                    <div class="panel-title">แผนที่</div>
+                    <div id="map"></div>
+                </div>
+
+                <!-- ค้นหา -->
+                <div id="search-view" class="view">
+                    <div class="panel-title">ค้นหาสถานประกอบการนวดสปา</div>
+                    <div class="search-box">
+                        <div class="search-field">
+                            <label for="searchTH">ชื่อสถานประกอบการ (ไทย)</label>
+                            <input type="text" id="searchTH" autocomplete="off">
+                        </div>
+                        <div class="search-field">
+                            <label for="searchEN">ชื่อสถานประกอบการ (Eng)</label>
+                            <input type="text" id="searchEN" autocomplete="off">
+                        </div>
+                        <div class="search-field">
+                            <label for="searchLicense">เลขที่ใบอนุญาต</label>
+                            <input type="text" id="searchLicense" autocomplete="off">
+                        </div>
+                        <div class="filter-row">
+                            <span class="filter-pill">filter</span>
+                            <select id="searchAmphoe" class="pill-select" onchange="onSearchAmphoeChange()">
+                                <option value="">อำเภอ — ทั้งหมด</option>
+                            </select>
+                            <select id="searchTambon" class="pill-select">
+                                <option value="">ตำบล — ทั้งหมด</option>
+                            </select>
+                        </div>
+                        <button onclick="performSearch()">ค้นหา</button>
+                        <div class="search-hint">กรอกข้อมูลหรือเลือกตัวกรอง อย่างน้อย 1 อย่าง แล้วกด ค้นหา</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ฝั่งขวา (แสดงข้อมูล) -->
+            <div class="panel" id="right-panel">
+                <div class="panel-title">ข้อมูล</div>
+                <div id="details-content">
+                    <div class="no-data">ไม่มีข้อมูล</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- หน้าสำหรับเจ้าหน้าที่ (Staff Dashboard) -->
+    <div id="staff">
+        <div class="header">
+            <h2>หน้าจัดการ — เจ้าหน้าที่</h2>
+            <div class="actions">
+                <button class="icon-btn" onclick="exitStaff()" title="กลับหน้าแรก">⌂</button>
+                <button class="icon-btn dark">☰</button>
+            </div>
+        </div>
+
+        <div class="staff-toolbar">
+            <input type="text" id="staffSearch" placeholder="ค้นหา ชื่อ / เลขใบอนุญาต / เบอร์โทร / ที่อยู่">
+            <button class="btn-pill btn-add" onclick="openAddForm()">＋ เพิ่มสถานประกอบการ</button>
+            <button class="btn-pill btn-export" onclick="exportJSON()" title="ดาวน์โหลด data.json ที่อัปเดตแล้ว">⬇ Export JSON</button>
+            <button class="btn-pill btn-reset" onclick="resetData()" title="ล้างข้อมูลที่แก้ไข แล้วโหลด data.json ต้นฉบับใหม่">↻ รีเซ็ต</button>
+        </div>
+
+        <div class="staff-table-wrap">
+            <table class="staff-table">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">#</th>
+                        <th>ชื่อ (ไทย)</th>
+                        <th>ชื่อ (Eng)</th>
+                        <th>เลขใบอนุญาต</th>
+                        <th>ประเภท</th>
+                        <th>สถานะ</th>
+                        <th style="width:100px;">การจัดการ</th>
+                    </tr>
+                </thead>
+                <tbody id="staffTbody"></tbody>
+            </table>
+            <div class="staff-pager">
+                <button id="pagerPrev" onclick="changePage(-1)">‹ ก่อนหน้า</button>
+                <span id="pagerInfo">—</span>
+                <button id="pagerNext" onclick="changePage(1)">ถัดไป ›</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: ฟอร์มเพิ่ม / แก้ไข -->
+    <div id="formModal" class="modal-backdrop">
+        <div class="modal">
+            <h2 id="formTitle">เพิ่มสถานประกอบการ</h2>
+            <p class="modal-sub">กรอกข้อมูลให้ครบถ้วน ช่องที่มี * คือจำเป็น</p>
+            <form id="entryForm" onsubmit="saveForm(event)">
+                <div class="form-grid">
+                    <div class="form-section-title">ข้อมูลสถานประกอบการ</div>
+                    <div class="form-field full">
+                        <label>ชื่อสถานประกอบการ (ไทย) *</label>
+                        <input name="ชื่อสถานประกอบการ(ไทย)" required>
+                    </div>
+                    <div class="form-field full">
+                        <label>ชื่อสถานประกอบการ (อังกฤษ)</label>
+                        <input name="ชื่อสถานประกอบการ(อังกฤษ)">
+                    </div>
+                    <div class="form-field">
+                        <label>ประเภทกิจการ</label>
+                        <select name="ประเภทกิจการ">
+                            <option value="สปา">สปา</option>
+                            <option value="นวดเพื่อสุขภาพ">นวดเพื่อสุขภาพ</option>
+                            <option value="นวดเพื่อเสริมสวย">นวดเพื่อเสริมสวย</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>ชื่อผู้ประกอบการ</label>
+                        <input name="ชื่อผู้ประกอบการ">
+                    </div>
+
+                    <div class="form-section-title">ใบอนุญาต</div>
+                    <div class="form-field">
+                        <label>เลขที่ใบอนุญาต *</label>
+                        <input name="เลขที่ใบอนุญาต" required>
+                    </div>
+                    <div class="form-field">
+                        <label>เบอร์โทรศัพท์</label>
+                        <input name="เบอร์โทรศัพท์">
+                    </div>
+                    <div class="form-field">
+                        <label>วันที่อนุญาต</label>
+                        <input type="date" name="วันที่อนุญาต">
+                    </div>
+                    <div class="form-field">
+                        <label>วันที่หมดอายุ</label>
+                        <input type="date" name="วันที่หมดอายุ">
+                    </div>
+
+                    <div class="form-section-title">ที่อยู่</div>
+                    <div class="form-field">
+                        <label>เลขที่</label>
+                        <input name="เลขที่">
+                    </div>
+                    <div class="form-field">
+                        <label>ซอย</label>
+                        <input name="ซอย">
+                    </div>
+                    <div class="form-field">
+                        <label>ถนน</label>
+                        <input name="ถนน">
+                    </div>
+                    <div class="form-field">
+                        <label>ตำบล/แขวง</label>
+                        <input name="เขต">
+                    </div>
+                    <div class="form-field">
+                        <label>อำเภอ/เขต</label>
+                        <input name="เขวง">
+                    </div>
+                    <div class="form-field">
+                        <label>จังหวัด</label>
+                        <input name="จังหวัด" value="เชียงใหม่">
+                    </div>
+                    <div class="form-field full">
+                        <label>ที่อยู่เต็ม (ระบบจะรวมให้อัตโนมัติถ้าเว้นว่าง)</label>
+                        <input name="ที่อยู่เต็ม">
+                    </div>
+
+                    <div class="form-section-title">พิกัดบนแผนที่</div>
+                    <div class="form-field">
+                        <label>Latitude (ละติจูด)</label>
+                        <input type="number" step="any" name="Latitude" placeholder="เช่น 18.7883">
+                    </div>
+                    <div class="form-field">
+                        <label>Longitude (ลองจิจูด)</label>
+                        <input type="number" step="any" name="Longitude" placeholder="เช่น 98.9853">
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-pill btn-cancel" onclick="closeForm()">ยกเลิก</button>
+                    <button type="submit" class="btn-pill btn-save">บันทึก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JS สำหรับแผนที่ Leaflet -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        let map;
+        let markers = [];
+        let spaData = [];
+
+        // คอลัมน์ที่ใช้
+        const COL_NO       = 'ลำดับ';
+        const COL_NAME_TH  = 'ชื่อสถานประกอบการ(ไทย)';
+        const COL_NAME_EN  = 'ชื่อสถานประกอบการ(อังกฤษ)';
+        const COL_LICENSE  = 'เลขที่ใบอนุญาต';
+        const COL_OWNER    = 'ชื่อผู้ประกอบการ';
+        const COL_TYPE     = 'ประเภทกิจการ';
+        const COL_TEL      = 'เบอร์โทรศัพท์';
+        const COL_ADDRESS  = 'ที่อยู่เต็ม';
+        const COL_LIC_DATE = 'วันที่อนุญาต';
+        const COL_EXPIRE   = 'วันที่หมดอายุ';
+        const COL_NO_ADDR  = 'เลขที่';
+        const COL_SOI      = 'ซอย';
+        const COL_ROAD     = 'ถนน';
+        const COL_TAMBON   = 'เขต';   // ตำบล (ตามคีย์ในไฟล์ data.json)
+        const COL_AMPHOE   = 'เขวง';  // อำเภอ (ในไฟล์ต้นฉบับสะกดเป็น "เขวง" — เก็บไว้ตรงกับข้อมูล)
+        const COL_PROVINCE = 'จังหวัด';
+        const COL_LAT      = 'Latitude';
+        const COL_LNG      = 'Longitude';
+
+        // Store: localStorage layer ที่ seed จาก data.json
+        const Store = {
+            KEY: 'spa_data_v1',
+            async load() {
+                const cached = localStorage.getItem(this.KEY);
+                if(cached) {
+                    try { return JSON.parse(cached); } catch(e) { /* fall through */ }
+                }
+                const res = await fetch('data.json', {cache: 'no-store'});
+                if(!res.ok) throw new Error('HTTP ' + res.status);
+                const fresh = await res.json();
+                localStorage.setItem(this.KEY, JSON.stringify(fresh));
+                return fresh;
+            },
+            save(records) {
+                localStorage.setItem(this.KEY, JSON.stringify(records));
+            },
+            clear() { localStorage.removeItem(this.KEY); }
+        };
+
+        // 1. โหลดแผนที่
+        function initMap() {
+            if(!map) {
+                map = L.map('map').setView([18.7883, 98.9853], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+            }
+        }
+
+        // 2. โหลดข้อมูลผ่าน Store (localStorage seed มาจาก data.json)
+        async function loadData() {
+            try {
+                const all = await Store.load();
+                processMapData(all);
+            } catch (error) {
+                console.error("Error loading data:", error);
+                alert("ไม่สามารถโหลดไฟล์ data.json ได้\nกรุณาเปิดผ่าน Local Server เช่น VS Code Live Server หรือ python -m http.server");
+            }
+        }
+
+        // คำนวณสถานะ เปิด/ปิด ทำการ จากวันหมดอายุใบอนุญาต
+        function getStatus(spa) {
+            const exp = spa[COL_EXPIRE];
+            if(!exp) return { open: true, label: 'เปิดทำการ' };
+            const expDate = (exp instanceof Date) ? exp : new Date(exp);
+            if(isNaN(expDate.getTime())) return { open: true, label: 'เปิดทำการ' };
+            const open = expDate.getTime() >= Date.now();
+            return { open, label: open ? 'เปิดทำการ' : 'ปิดทำการ' };
+        }
+        
+
+        // 3. ปักหมุดลงบนแผนที่
+        function processMapData(json) {
+        // เก็บ array เต็มไว้เพื่อให้ฝั่ง staff ใช้ร่วมกันได้
+        spaData = json;
+
+        // ล้างหมุดเก่าก่อนปักใหม่ (กันซ้อนเวลาเข้าหน้า public หลายรอบ)
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        const visible = json.filter(row =>
+        row[COL_LAT] && row[COL_LNG] &&
+        !isNaN(parseFloat(row[COL_LAT])) && !isNaN(parseFloat(row[COL_LNG]))
+        );
+
+        visible.forEach(spa => {
+        // 1. เช็คสถานะก่อนเป็นอันดับแรก
+        const status  = getStatus(spa);
+
+        // 2. ถ้าสถานะเป็นปิดทำการ (open: false) ให้ข้าม (return) ไปทำร้านถัดไปทันที
+        if (status.open === false) {
+            return; 
+        }
+
+        // --- หากผ่านเงื่อนไขด้านบนมาได้ แสดงว่า "เปิดทำการ" ถึงจะเริ่มปักหมุด ---
+        const lat = parseFloat(spa[COL_LAT]);
+        const lng = parseFloat(spa[COL_LNG]);
+        const marker = L.marker([lat, lng]).addTo(map);
+
+        const nameTH  = spa[COL_NAME_TH] || '-';
+        const nameEN  = spa[COL_NAME_EN] || '';
+        const address = spa[COL_ADDRESS] || '-';
+        const tel     = spa[COL_TEL] || '-';
+        
+        // ตรงนี้สถานะจะเป็น open เสมอแล้ว เพราะเรากรองปิดทำการทิ้งไปแล้ว
+        const statusClass = 'status-open'; 
+
+        const popupHTML = `
+            <div class="popup-title">ร้าน ${nameTH}</div>
+            <div class="popup-subtitle">${nameEN}</div>
+            <div class="popup-addr">${address}</div>
+            <div class="popup-tel">Tel. ${tel}</div>
+            <div class="popup-footer">
+                <span class="${statusClass}">สถานะ ${status.label}</span>
+                <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lng}" target="_blank" class="gmap-link" title="เปิด Google Maps">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+            </div>
+        `;
+
+        marker.bindPopup(popupHTML);
+        marker.on('click', () => showDetails(spa));
+        markers.push(marker);
+    });
+
+    // เปลี่ยนจาก visible.length เป็น markers.length เพื่อให้นับเฉพาะหมุดที่เปิดทำการจริงโชว์ใน Console
+    console.log(`โหลดข้อมูลสำเร็จ: ${spaData.length} ระเบียน, ปักหมุดจริง (เฉพาะเปิดทำการ) ${markers.length} จุด`);
+
+    // populate ภาพรวม + filter ของหน้าค้นหา
+    populateOverviewDropdowns();
+}
+
+        // 4. แสดงข้อมูลฝั่งขวา
+        function showDetails(spa, fromSearch = false) {
+            const detailPanel = document.getElementById('details-content');
+
+            const type = spa[COL_TYPE] || 'สถานประกอบการ';
+            // ทั้ง สปา และ นวดเพื่อสุขภาพ ใช้สี badge เดียวกัน (สีเขียว = ขึ้นทะเบียนถูกต้อง) ตามดีไซน์
+            const lat = parseFloat(spa[COL_LAT]);
+            const lng = parseFloat(spa[COL_LNG]);
+            const hasCoords = !isNaN(lat) && !isNaN(lng);
+
+            let html = `
+                <div class="badge-type">
+                    <div style="font-size:0.95rem; font-weight:normal;">ประเภทสถานประกอบการ</div>
+                    ${type}
+                </div>
+                <div class="info-row"><b>ชื่อสถานประกอบการ (ไทย):</b> ${spa[COL_NAME_TH] || '-'}</div>
+                <div class="info-row"><b>ชื่อสถานประกอบการ (Eng):</b> ${spa[COL_NAME_EN] || '-'}</div>
+                <div class="info-row"><b>เลขที่ใบอนุญาต:</b> ${spa[COL_LICENSE] || '-'}</div>
+                <div class="info-row"><b>ชื่อผู้ประกอบการ:</b> ${spa[COL_OWNER] || '-'}</div>
+                <div class="info-row"><b>ที่อยู่:</b> ${spa[COL_ADDRESS] || '-'}</div>
+                <div class="info-row"><b>เบอร์โทรศัพท์:</b> ${spa[COL_TEL] || '-'}</div>
+            `;
+
+            if(fromSearch && hasCoords) {
+                html += `
+                <button class="btn-view-map" onclick="viewOnMap(${lat}, ${lng})">
+                    คลิกเพื่อดูแผนที่
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </button>`;
+            }
+
+            detailPanel.innerHTML = html;
+        }
+
+        // 5. Landing Page -> App
+        function enterApp() {
+            document.getElementById('landing').style.display = 'none';
+            document.getElementById('app').style.display = 'flex';
+            initMap();
+            loadData();
+            switchTab('overview');  // ตั้ง state ของแท็บ + ซ่อน panel ขวาเมื่ออยู่หน้าภาพรวม
+        }
+
+        // 6. สลับ Tab
+        function switchTab(tabName) {
+            ['overview', 'map', 'search'].forEach(n => {
+                document.getElementById('tab-' + n).classList.remove('active');
+                document.getElementById(n + '-view').classList.remove('active');
+            });
+            document.getElementById('tab-' + tabName).classList.add('active');
+            document.getElementById(tabName + '-view').classList.add('active');
+
+            // หน้าภาพรวมโชว์เต็มความกว้าง: ซ่อนแผงข้อมูลฝั่งขวา
+            document.getElementById('right-panel').style.display =
+                (tabName === 'overview') ? 'none' : 'flex';
+
+            if(tabName === 'map') {
+                setTimeout(() => map && map.invalidateSize(), 100);
+            }
+        }
+
+        // ===== Dropdown สำหรับ overview/ค้นหา =====
+        function uniqueAmphoes() {
+            const set = new Set();
+            spaData.forEach(s => {
+                const v = (s[COL_AMPHOE] || '').toString().trim();
+                if(v) set.add(v);
+            });
+            return [...set].sort((a,b) => a.localeCompare(b, 'th'));
+        }
+        function uniqueTambons(amphoe) {
+            const set = new Set();
+            spaData.forEach(s => {
+                if(amphoe && (s[COL_AMPHOE] || '').toString().trim() !== amphoe) return;
+                const v = (s[COL_TAMBON] || '').toString().trim();
+                if(v) set.add(v);
+            });
+            return [...set].sort((a,b) => a.localeCompare(b, 'th'));
+        }
+        function placesInAmphoe(amphoe) {
+            return spaData.filter(s =>
+                getStatus(s).open &&
+                (!amphoe || (s[COL_AMPHOE] || '').toString().trim() === amphoe)
+            );
+        }
+
+        function populateOverviewDropdowns() {
+            const amphoeSel = document.getElementById('ovAmphoe');
+            amphoeSel.innerHTML = '<option value="">— ทั้งจังหวัดเชียงใหม่ —</option>' +
+                uniqueAmphoes().map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+            populateOverviewPlaces();
+
+            const searchAmphoeSel = document.getElementById('searchAmphoe');
+            searchAmphoeSel.innerHTML = '<option value="">อำเภอ — ทั้งหมด</option>' +
+                uniqueAmphoes().map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+            populateSearchTambons();
+        }
+        function populateOverviewPlaces() {
+            const amphoe = document.getElementById('ovAmphoe').value;
+            const placeSel = document.getElementById('ovPlace');
+            const places = placesInAmphoe(amphoe);
+            placeSel.innerHTML = '<option value="">— ทั้งหมด —</option>' +
+                places.map((p, i) => {
+                    const idx = spaData.indexOf(p);
+                    const name = p[COL_NAME_TH] || p[COL_NAME_EN] || '(ไม่มีชื่อ)';
+                    return `<option value="${idx}">${escapeHtml(name)}</option>`;
+                }).join('');
+            updateOverviewGoButton();
+        }
+        function populateSearchTambons() {
+            const amphoe = document.getElementById('searchAmphoe').value;
+            const sel = document.getElementById('searchTambon');
+            const current = sel.value;
+            sel.innerHTML = '<option value="">ตำบล — ทั้งหมด</option>' +
+                uniqueTambons(amphoe).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+            if(current && [...sel.options].some(o => o.value === current)) sel.value = current;
+        }
+        function onOverviewAmphoeChange() { populateOverviewPlaces(); }
+        function onOverviewPlaceChange()  { updateOverviewGoButton(); }
+        function onSearchAmphoeChange()   { populateSearchTambons(); }
+
+        function updateOverviewGoButton() {
+            const placeVal = document.getElementById('ovPlace').value;
+            const amphoeVal = document.getElementById('ovAmphoe').value;
+            document.getElementById('ovGoMap').disabled = !placeVal && !amphoeVal;
+        }
+
+        function goToMapFromOverview() {
+            const placeVal = document.getElementById('ovPlace').value;
+            const amphoeVal = document.getElementById('ovAmphoe').value;
+            if(placeVal) {
+                const spa = spaData[parseInt(placeVal, 10)];
+                if(!spa) return;
+                showDetails(spa);
+                const lat = parseFloat(spa[COL_LAT]);
+                const lng = parseFloat(spa[COL_LNG]);
+                if(!isNaN(lat) && !isNaN(lng)) {
+                    viewOnMap(lat, lng);
+                } else {
+                    switchTab('map');
+                    alert('ไม่พบพิกัดของสถานประกอบการนี้');
+                }
+                return;
+            }
+            // เลือกแค่ อำเภอ → ซูมไปยังขอบเขตของหมุดในอำเภอนั้น
+            const list = placesInAmphoe(amphoeVal).filter(p => {
+                const la = parseFloat(p[COL_LAT]), ln = parseFloat(p[COL_LNG]);
+                return !isNaN(la) && !isNaN(ln);
+            });
+            switchTab('map');
+            if(list.length === 0) {
+                alert('ไม่พบพิกัดในอำเภอที่เลือก');
+                return;
+            }
+            const bounds = L.latLngBounds(list.map(p => [parseFloat(p[COL_LAT]), parseFloat(p[COL_LNG])]));
+            setTimeout(() => map.fitBounds(bounds, { padding: [40, 40] }), 200);
+        }
+
+        // 7. ค้นหา — กรอก/เลือก 1+ ช่อง รวมเงื่อนไขแบบ AND
+        function performSearch() {
+            const qTH  = document.getElementById('searchTH').value.trim().toLowerCase();
+            const qEN  = document.getElementById('searchEN').value.trim().toLowerCase();
+            const qLic = document.getElementById('searchLicense').value.trim().toLowerCase();
+            const qAmphoe = document.getElementById('searchAmphoe').value;
+            const qTambon = document.getElementById('searchTambon').value;
+
+            if(!qTH && !qEN && !qLic && !qAmphoe && !qTambon) {
+                alert('กรุณากรอกข้อมูลหรือเลือกตัวกรองอย่างน้อย 1 รายการ');
+                return;
+            }
+
+            const result = spaData.find(spa => {
+                const th  = (spa[COL_NAME_TH] || '').toString().toLowerCase();
+                const en  = (spa[COL_NAME_EN] || '').toString().toLowerCase();
+                const lic = (spa[COL_LICENSE] || '').toString().toLowerCase();
+                const amp = (spa[COL_AMPHOE]  || '').toString().trim();
+                const tam = (spa[COL_TAMBON]  || '').toString().trim();
+                if(qTH  && !th.includes(qTH))     return false;
+                if(qEN  && !en.includes(qEN))     return false;
+                if(qLic && !lic.includes(qLic))   return false;
+                if(qAmphoe && amp !== qAmphoe)    return false;
+                if(qTambon && tam !== qTambon)    return false;
+                return true;
+            });
+
+            if(result) {
+                showDetails(result, true);
+            } else {
+                document.getElementById('details-content').innerHTML = `
+                    <div style="background:#222; color:#fff; border-radius:16px; padding:30px; text-align:center; flex:1; display:flex; align-items:center; justify-content:center;">
+                        <h2 style="margin:0; font-weight:500;">ไม่พบข้อมูล</h2>
+                    </div>
+                `;
+            }
+        }
+
+        // กด Enter ในช่องใดก็ได้ ให้ค้นหา
+        ['searchTH','searchEN','searchLicense'].forEach(id => {
+            document.getElementById(id).addEventListener('keypress', e => {
+                if(e.key === 'Enter') performSearch();
+            });
+        });
+
+        // 8. ดูแผนที่จากผลการค้นหา
+        function viewOnMap(lat, lng) {
+            switchTab('map');
+            map.setView([lat, lng], 16);
+            const targetMarker = markers.find(m =>
+                Math.abs(m.getLatLng().lat - lat) < 1e-9 &&
+                Math.abs(m.getLatLng().lng - lng) < 1e-9
+            );
+            if(targetMarker) targetMarker.openPopup();
+        }
+
+        // 9. รีเซ็ต
+        function resetApp() {
+            switchTab('overview');
+            document.getElementById('details-content').innerHTML = `<div class="no-data">ไม่มีข้อมูล</div>`;
+            ['searchTH','searchEN','searchLicense'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('searchAmphoe').value = '';
+            document.getElementById('searchTambon').value = '';
+            populateSearchTambons();
+            document.getElementById('ovAmphoe').value = '';
+            populateOverviewPlaces();
+            if(map) {
+                map.closePopup();
+                map.setView([18.7883, 98.9853], 12);
+            }
+        }
+
+        // ===== Staff Dashboard =====
+        let staffPage = 0;
+        let staffFilter = '';
+        let editingIndex = null;
+        const STAFF_PAGE_SIZE = 25;
+
+        async function enterStaff() {
+            try {
+                spaData = await Store.load();
+            } catch(e) {
+                console.error(e);
+                alert('ไม่สามารถโหลดข้อมูลได้ กรุณาเปิดผ่าน Local Server');
+                return;
+            }
+            document.getElementById('landing').style.display = 'none';
+            document.getElementById('app').style.display = 'none';
+            document.getElementById('staff').style.display = 'flex';
+            staffPage = 0;
+            renderStaffList();
+        }
+
+        function exitStaff() {
+            document.getElementById('staff').style.display = 'none';
+            document.getElementById('landing').style.display = 'flex';
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+            }[c]));
+        }
+
+        function renderStaffList() {
+            const tbody = document.getElementById('staffTbody');
+            const q = staffFilter.trim().toLowerCase();
+
+            const filtered = !q ? spaData : spaData.filter(spa => {
+                const fields = [
+                    spa[COL_NAME_TH], spa[COL_NAME_EN], spa[COL_LICENSE],
+                    spa[COL_TEL], spa[COL_ADDRESS], spa[COL_OWNER]
+                ];
+                return fields.some(v => v && String(v).toLowerCase().includes(q));
+            });
+
+            const total = filtered.length;
+            const totalPages = Math.max(1, Math.ceil(total / STAFF_PAGE_SIZE));
+            if(staffPage >= totalPages) staffPage = totalPages - 1;
+            if(staffPage < 0) staffPage = 0;
+
+            const start = staffPage * STAFF_PAGE_SIZE;
+            const slice = filtered.slice(start, start + STAFF_PAGE_SIZE);
+
+            if(slice.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="empty-row">ไม่พบข้อมูล</td></tr>`;
+            } else {
+                tbody.innerHTML = slice.map(spa => {
+                    const idx = spaData.indexOf(spa);
+                    const status = getStatus(spa);
+                    return `
+                        <tr>
+                            <td>${escapeHtml(spa[COL_NO] != null ? spa[COL_NO] : '-')}</td>
+                            <td>${escapeHtml(spa[COL_NAME_TH] || '-')}</td>
+                            <td>${escapeHtml(spa[COL_NAME_EN] || '-')}</td>
+                            <td>${escapeHtml(spa[COL_LICENSE] || '-')}</td>
+                            <td><span class="pill-type">${escapeHtml(spa[COL_TYPE] || '-')}</span></td>
+                            <td><span class="pill-status ${status.open ? 'open' : 'closed'}">${status.label}</span></td>
+                            <td>
+                                <div class="row-actions">
+                                    <button class="icon-action icon-edit" onclick="openEditForm(${idx})" title="แก้ไข">✎</button>
+                                    <button class="icon-action icon-delete" onclick="deleteEntry(${idx})" title="ลบ">✕</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('pagerInfo').textContent =
+                total === 0 ? '— ไม่มีข้อมูล —'
+                            : `หน้า ${staffPage + 1} / ${totalPages} (ทั้งหมด ${total} รายการ)`;
+            document.getElementById('pagerPrev').disabled = staffPage === 0;
+            document.getElementById('pagerNext').disabled = staffPage >= totalPages - 1;
+        }
+
+        function changePage(delta) {
+            staffPage += delta;
+            renderStaffList();
+        }
+
+        document.getElementById('staffSearch').addEventListener('input', e => {
+            staffFilter = e.target.value;
+            staffPage = 0;
+            renderStaffList();
+        });
+
+        function openAddForm() {
+            editingIndex = null;
+            document.getElementById('formTitle').textContent = 'เพิ่มสถานประกอบการ';
+            const form = document.getElementById('entryForm');
+            form.reset();
+            // ค่าเริ่มต้น
+            form.elements['จังหวัด'].value = 'เชียงใหม่';
+            document.getElementById('formModal').classList.add('active');
+        }
+
+        function openEditForm(index) {
+            editingIndex = index;
+            const spa = spaData[index];
+            document.getElementById('formTitle').textContent = 'แก้ไขข้อมูล';
+            const form = document.getElementById('entryForm');
+            form.reset();
+            [...form.elements].forEach(el => {
+                if(el.name && Object.prototype.hasOwnProperty.call(spa, el.name)) {
+                    const v = spa[el.name];
+                    el.value = (v === null || v === undefined) ? '' : v;
+                }
+            });
+            document.getElementById('formModal').classList.add('active');
+        }
+
+        function closeForm() {
+            document.getElementById('formModal').classList.remove('active');
+        }
+
+        function saveForm(e) {
+            e.preventDefault();
+            const form = document.getElementById('entryForm');
+            const data = {};
+            [...form.elements].forEach(el => {
+                if(!el.name) return;
+                let v = el.value;
+                if(el.type === 'number' && v !== '') v = parseFloat(v);
+                data[el.name] = v;
+            });
+
+            // สร้างที่อยู่เต็มอัตโนมัติถ้าเว้นว่าง
+            if(!data[COL_ADDRESS]) {
+                data[COL_ADDRESS] = [
+                    data[COL_NO_ADDR], data[COL_SOI], data[COL_ROAD],
+                    data[COL_TAMBON], data[COL_AMPHOE], data[COL_PROVINCE]
+                ].filter(s => s).join(' ');
+            }
+
+            if(editingIndex === null) {
+                const maxNo = spaData.reduce((m, s) => {
+                    const n = parseFloat(s[COL_NO]);
+                    return isNaN(n) ? m : Math.max(m, n);
+                }, 0);
+                data[COL_NO] = maxNo + 1;
+                spaData.push(data);
+            } else {
+                spaData[editingIndex] = { ...spaData[editingIndex], ...data };
+            }
+
+            Store.save(spaData);
+            closeForm();
+            renderStaffList();
+        }
+
+        function deleteEntry(index) {
+            const spa = spaData[index];
+            const name = spa[COL_NAME_TH] || spa[COL_LICENSE] || 'รายการนี้';
+            if(!confirm(`ยืนยันลบ "${name}"?\n\nหมายเหตุ: การลบจะมีผลเฉพาะใน browser นี้\nกด Export JSON เพื่อบันทึกเป็นไฟล์ใหม่`)) return;
+            spaData.splice(index, 1);
+            Store.save(spaData);
+            renderStaffList();
+        }
+
+        function exportJSON() {
+            const blob = new Blob(
+                [JSON.stringify(spaData, null, 2)],
+                { type: 'application/json;charset=utf-8' }
+            );
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'data.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert('ดาวน์โหลด data.json แล้ว\nนำไฟล์นี้แทนที่ data.json ในโฟลเดอร์โปรเจกต์เพื่อบันทึกถาวร');
+        }
+
+        async function resetData() {
+            if(!confirm('ล้างข้อมูลที่แก้ไขทั้งหมด แล้วโหลด data.json ต้นฉบับใหม่?\nการกระทำนี้ไม่สามารถย้อนกลับได้')) return;
+            Store.clear();
+            try {
+                spaData = await Store.load();
+            } catch(err) {
+                alert('โหลดไฟล์ data.json ไม่สำเร็จ');
+                return;
+            }
+            staffPage = 0;
+            staffFilter = '';
+            document.getElementById('staffSearch').value = '';
+            renderStaffList();
+        }
+
+        // ปิด modal เมื่อคลิกพื้นที่นอกกล่อง
+        document.getElementById('formModal').addEventListener('click', e => {
+            if(e.target.id === 'formModal') closeForm();
+        });
+    </script>
+</body>
+</html>
