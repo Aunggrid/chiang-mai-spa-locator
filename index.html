@@ -437,6 +437,27 @@
         </div>
     </div>
 
+    <!-- Modal: ใส่รหัสผ่านเข้าหน้าเจ้าหน้าที่ -->
+    <div id="authModal" class="modal-backdrop">
+        <div class="modal" style="max-width: 420px;">
+            <h2 style="color: var(--color-staff);">เข้าสู่ระบบเจ้าหน้าที่</h2>
+            <p class="modal-sub">กรุณาใส่รหัสผ่านเพื่อเข้าสู่หน้าจัดการ</p>
+            <form id="authForm" onsubmit="submitAuth(event)">
+                <div class="form-field">
+                    <label>รหัสผ่าน</label>
+                    <input type="password" id="authPassword" autocomplete="current-password" required autofocus>
+                </div>
+                <div id="authError" style="display:none; color: var(--color-staff); margin-top: 10px; font-size: 0.95rem;">
+                    รหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-pill btn-cancel" onclick="cancelAuth()">ยกเลิก</button>
+                    <button type="submit" class="btn-pill btn-save">เข้าสู่ระบบ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal: ฟอร์มเพิ่ม / แก้ไข -->
     <div id="formModal" class="modal-backdrop">
         <div class="modal">
@@ -912,7 +933,50 @@
         let editingIndex = null;
         const STAFF_PAGE_SIZE = 25;
 
-        async function enterStaff() {
+        // ===== Staff password gate =====
+        // หมายเหตุ: เนื่องจากเป็นเว็บ static การตรวจรหัสฝั่ง client สามารถถูก bypass ได้
+        // จาก browser dev tools — ใช้ได้แค่กันคนทั่วไปไม่ให้กดเข้าโดยบังเอิญ
+        // ถ้าต้องการความปลอดภัยจริงจัง ต้องมี backend แยก
+        const STAFF_PASS_HASH = 'b509e46debaa0c1cd590b3055e68f3ec9a21f1d53b98b28f13544812c6460c14';
+        const STAFF_UNLOCK_KEY = 'spa_staff_unlocked_v1';
+
+        async function sha256Hex(text) {
+            const buf = new TextEncoder().encode(text);
+            const hash = await crypto.subtle.digest('SHA-256', buf);
+            return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function enterStaff() {
+            if(sessionStorage.getItem(STAFF_UNLOCK_KEY) === '1') {
+                doEnterStaff();
+                return;
+            }
+            document.getElementById('authError').style.display = 'none';
+            document.getElementById('authPassword').value = '';
+            document.getElementById('authModal').classList.add('active');
+            setTimeout(() => document.getElementById('authPassword').focus(), 50);
+        }
+
+        async function submitAuth(e) {
+            e.preventDefault();
+            const pwd = document.getElementById('authPassword').value;
+            const hash = await sha256Hex(pwd);
+            if(hash === STAFF_PASS_HASH) {
+                sessionStorage.setItem(STAFF_UNLOCK_KEY, '1');
+                document.getElementById('authModal').classList.remove('active');
+                doEnterStaff();
+            } else {
+                document.getElementById('authError').style.display = 'block';
+                document.getElementById('authPassword').value = '';
+                document.getElementById('authPassword').focus();
+            }
+        }
+
+        function cancelAuth() {
+            document.getElementById('authModal').classList.remove('active');
+        }
+
+        async function doEnterStaff() {
             try {
                 spaData = await Store.load();
             } catch(e) {
