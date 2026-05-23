@@ -178,6 +178,37 @@
             display: flex; align-items: center; gap: 8px; font-weight: 500;
         }
 
+        /* --- รายการผลค้นหา --- */
+        .results-summary { font-size: 0.95rem; color: #666; margin-bottom: 12px; padding: 0 4px; }
+        .results-list { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; padding-right: 4px; }
+        .result-card {
+            background: #fafafa; border: 1px solid #eee; border-radius: 14px;
+            padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .result-card:hover { background: #fff; border-color: var(--color-public); }
+        .result-card .rc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .result-card .rc-name-th { font-weight: 600; font-size: 1.05rem; }
+        .result-card .rc-name-en { font-size: 0.85rem; color: #777; }
+        .result-card .rc-type {
+            background: var(--color-public); color: var(--text-dark);
+            padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 500;
+            white-space: nowrap;
+        }
+        .result-card .rc-meta { font-size: 0.85rem; color: #555; line-height: 1.5; }
+        .result-card .rc-actions {
+            display: flex; gap: 8px; margin-top: 4px;
+            align-items: center; justify-content: space-between;
+        }
+        .result-card .rc-status { font-size: 0.85rem; font-weight: 500; }
+        .result-card .rc-status.open { color: #1a8f5e; }
+        .result-card .rc-status.closed { color: #c54a26; }
+        .result-card .rc-map-btn {
+            padding: 6px 14px; background: var(--text-dark); color: var(--white);
+            border: none; border-radius: 50px; cursor: pointer; font-size: 0.85rem;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+
         /* --- ดีไซน์ Pop-up บนแผนที่ (สไตล์สีดำตามที่ออกแบบ) --- */
         .leaflet-popup-content-wrapper { background: rgba(0,0,0,0.85); color: #fff; border-radius: 16px; padding: 5px; }
         .leaflet-popup-tip { background: rgba(0,0,0,0.85); }
@@ -868,7 +899,7 @@
                 return;
             }
 
-            const result = spaData.find(spa => {
+            const results = spaData.filter(spa => {
                 const th  = (spa[COL_NAME_TH] || '').toString().toLowerCase();
                 const en  = (spa[COL_NAME_EN] || '').toString().toLowerCase();
                 const lic = (spa[COL_LICENSE] || '').toString().toLowerCase();
@@ -882,15 +913,60 @@
                 return true;
             });
 
-            if(result) {
-                showDetails(result, true);
-            } else {
-                document.getElementById('details-content').innerHTML = `
+            renderSearchResults(results);
+        }
+
+        function renderSearchResults(results) {
+            const panel = document.getElementById('details-content');
+            if(results.length === 0) {
+                panel.innerHTML = `
                     <div style="background:#222; color:#fff; border-radius:16px; padding:30px; text-align:center; flex:1; display:flex; align-items:center; justify-content:center;">
                         <h2 style="margin:0; font-weight:500;">ไม่พบข้อมูล</h2>
                     </div>
                 `;
+                return;
             }
+            const cards = results.map(spa => {
+                const idx = spaData.indexOf(spa);
+                const status = getStatus(spa);
+                const lat = parseFloat(spa[COL_LAT]);
+                const lng = parseFloat(spa[COL_LNG]);
+                const hasCoords = !isNaN(lat) && !isNaN(lng);
+                const nameTH = escapeHtml(spa[COL_NAME_TH] || '-');
+                const nameEN = escapeHtml(spa[COL_NAME_EN] || '');
+                const type   = escapeHtml(spa[COL_TYPE] || '-');
+                const addr   = escapeHtml(spa[COL_ADDRESS] || '-');
+                const tel    = escapeHtml(spa[COL_TEL] || '-');
+                const lic    = escapeHtml(spa[COL_LICENSE] || '-');
+                return `
+                    <div class="result-card">
+                        <div class="rc-top">
+                            <div>
+                                <div class="rc-name-th">${nameTH}</div>
+                                ${nameEN ? `<div class="rc-name-en">${nameEN}</div>` : ''}
+                            </div>
+                            <span class="rc-type">${type}</span>
+                        </div>
+                        <div class="rc-meta"><b>เลขที่ใบอนุญาต:</b> ${lic}</div>
+                        <div class="rc-meta"><b>ที่อยู่:</b> ${addr}</div>
+                        <div class="rc-meta"><b>โทร:</b> ${tel}</div>
+                        <div class="rc-actions">
+                            <span class="rc-status ${status.open ? 'open' : 'closed'}">● ${status.label}</span>
+                            ${hasCoords
+                                ? `<button class="rc-map-btn" onclick="viewOnMap(${lat}, ${lng})">
+                                       ดูบนแผนที่
+                                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                                   </button>`
+                                : `<span style="font-size:0.8rem; color:#999;">ไม่มีพิกัด</span>`
+                            }
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            panel.innerHTML = `
+                <div class="results-summary">พบ ${results.length.toLocaleString('th-TH')} รายการ</div>
+                <div class="results-list">${cards}</div>
+            `;
         }
 
         // กด Enter ในช่องใดก็ได้ ให้ค้นหา
