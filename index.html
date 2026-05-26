@@ -144,8 +144,20 @@
             display: flex; justify-content: center; align-items: center;
             background: #f6f6f6; border-radius: 16px; padding: 30px;
             min-height: 280px; max-height: 380px;
+            position: relative;
         }
         .overview-illustration svg { width: 200px; height: 240px; }
+        .overview-illustration.has-map { padding: 0; display: block; max-height: none; }
+        #overviewMap {
+            width: 100%; height: 340px; border-radius: 16px; z-index: 0;
+        }
+        .overview-map-caption {
+            position: absolute; left: 14px; top: 14px; z-index: 2;
+            background: rgba(0,0,0,0.75); color: #fff;
+            padding: 6px 14px; border-radius: 50px;
+            font-size: 0.9rem; font-weight: 500;
+            pointer-events: none;
+        }
         .overview-controls { display: flex; flex-direction: column; gap: 18px; }
         .overview-controls label { font-size: 1.05rem; color: #333; }
         .overview-action {
@@ -350,8 +362,8 @@
                 <div id="overview-view" class="view active">
                     <div class="panel-title">สถานประกอบการเพื่อสุขภาพในจังหวัดเชียงใหม่</div>
                     <div class="overview-grid">
-                        <div class="overview-illustration" aria-hidden="true">
-                            <svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+                        <div class="overview-illustration" id="overviewIllustration" aria-hidden="true">
+                            <svg id="overviewSvg" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M100 10 C 60 10, 40 50, 50 110 C 55 145, 80 190, 100 230 C 120 190, 145 145, 150 110 C 160 50, 140 10, 100 10 Z"
                                       fill="#51dda2" opacity="0.25" stroke="#51dda2" stroke-width="2"/>
                                 <circle cx="100" cy="105" r="32" fill="#f08866"/>
@@ -359,6 +371,8 @@
                                 <text x="100" y="200" text-anchor="middle" font-family="Prompt, sans-serif"
                                       font-size="14" fill="#555" font-weight="600">เชียงใหม่</text>
                             </svg>
+                            <div id="overviewMap" style="display:none;"></div>
+                            <div id="overviewMapCaption" class="overview-map-caption" style="display:none;"></div>
                         </div>
                         <div class="overview-controls">
                             <label for="ovAmphoe">เลือกอำเภอที่ท่านสนใจ</label>
@@ -592,6 +606,8 @@
         let map;
         let markers = [];
         let spaData = [];
+        let overviewMap = null;
+        let overviewMarkers = [];
 
         // คอลัมน์ที่ใช้
         const COL_NO       = 'ลำดับ';
@@ -842,9 +858,91 @@
                 uniqueTambons(amphoe).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
             if(current && [...sel.options].some(o => o.value === current)) sel.value = current;
         }
-        function onOverviewAmphoeChange() { populateOverviewPlaces(); }
-        function onOverviewPlaceChange()  { /* ปุ่มเปิดให้คลิกได้ตลอด — ไม่ต้องคำนวณอะไรเพิ่ม */ }
+        function onOverviewAmphoeChange() {
+            populateOverviewPlaces();
+            renderOverviewMap(document.getElementById('ovAmphoe').value);
+        }
+        function onOverviewPlaceChange() {
+            const placeVal = document.getElementById('ovPlace').value;
+            if(!placeVal || !overviewMap) return;
+            const spa = spaData[parseInt(placeVal, 10)];
+            if(!spa) return;
+            const lat = parseFloat(spa[COL_LAT]);
+            const lng = parseFloat(spa[COL_LNG]);
+            if(isNaN(lat) || isNaN(lng)) return;
+            overviewMap.setView([lat, lng], 16);
+            const target = overviewMarkers.find(mm =>
+                Math.abs(mm.getLatLng().lat - lat) < 1e-9 &&
+                Math.abs(mm.getLatLng().lng - lng) < 1e-9
+            );
+            if(target) target.openPopup();
+        }
         function onSearchAmphoeChange()   { populateSearchTambons(); }
+
+        // ===== แผนที่ย่อในหน้าภาพรวม =====
+        function ensureOverviewMap() {
+            if(overviewMap) return overviewMap;
+            overviewMap = L.map('overviewMap', { zoomControl: true, attributionControl: false })
+                .setView([18.7883, 98.9853], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(overviewMap);
+            return overviewMap;
+        }
+        function clearOverviewMarkers() {
+            if(!overviewMap) return;
+            overviewMarkers.forEach(m => overviewMap.removeLayer(m));
+            overviewMarkers = [];
+        }
+        function renderOverviewMap(amphoe) {
+            const illust  = document.getElementById('overviewIllustration');
+            const svg     = document.getElementById('overviewSvg');
+            const mapDiv  = document.getElementById('overviewMap');
+            const caption = document.getElementById('overviewMapCaption');
+
+            if(!amphoe) {
+                if(svg) svg.style.display = '';
+                if(mapDiv) mapDiv.style.display = 'none';
+                if(caption) caption.style.display = 'none';
+                illust.classList.remove('has-map');
+                clearOverviewMarkers();
+                return;
+            }
+
+            if(svg) svg.style.display = 'none';
+            if(mapDiv) mapDiv.style.display = 'block';
+            illust.classList.add('has-map');
+
+            const m = ensureOverviewMap();
+            setTimeout(() => m.invalidateSize(), 50);
+
+            clearOverviewMarkers();
+            const list = placesInAmphoe(amphoe).filter(p => {
+                const la = parseFloat(p[COL_LAT]), ln = parseFloat(p[COL_LNG]);
+                return !isNaN(la) && !isNaN(ln);
+            });
+
+            list.forEach(spa => {
+                const lat = parseFloat(spa[COL_LAT]);
+                const lng = parseFloat(spa[COL_LNG]);
+                const marker = L.marker([lat, lng]).addTo(m);
+                const nameTH = spa[COL_NAME_TH] || '-';
+                const type   = spa[COL_TYPE] || '';
+                marker.bindPopup(
+                    `<div class="popup-title">${escapeHtml(nameTH)}</div>` +
+                    (type ? `<div class="popup-subtitle">${escapeHtml(type)}</div>` : '')
+                );
+                overviewMarkers.push(marker);
+            });
+
+            if(caption) {
+                caption.textContent = `อำเภอ${amphoe} — ${list.length.toLocaleString('th-TH')} แห่ง`;
+                caption.style.display = 'block';
+            }
+
+            if(list.length > 0) {
+                const bounds = L.latLngBounds(list.map(p => [parseFloat(p[COL_LAT]), parseFloat(p[COL_LNG])]));
+                setTimeout(() => m.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 }), 100);
+            }
+        }
 
         function goToMapFromOverview() {
             const placeVal = document.getElementById('ovPlace').value;
@@ -997,6 +1095,7 @@
             populateSearchTambons();
             document.getElementById('ovAmphoe').value = '';
             populateOverviewPlaces();
+            renderOverviewMap('');
             if(map) {
                 map.closePopup();
                 map.setView([18.7883, 98.9853], 12);
